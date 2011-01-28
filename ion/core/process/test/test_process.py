@@ -184,6 +184,38 @@ class ProcessTest(IonTestCase):
         self.assertEquals(cont, 'content123')
         log.info('Process 1 responsive correctly after init')
 
+    
+    @defer.inlineCallbacks
+    def test_activate_by_message(self):
+        p1 = ReceiverProcess(spawnargs={'proc-name':'p1'})
+        pid1 = yield p1.spawn()
+        proc1 = self._get_procinstance(pid1)
+
+        child2 = ProcessDesc(name='echo', module='ion.core.process.test.test_process')
+        pid2 = yield self.test_sup.spawn_child(child2, activate=False)
+        self.assertEquals(child2._get_state(), 'READY')
+        proc2 = self._get_procinstance(pid2)
+        self.assertEquals(proc2._get_state(), 'READY')
+
+        # The following tests that a message to a not yet activated process
+        # is queued and not lost, but not delivered
+        print 'pid2',pid2
+        yield proc1.send(pid2,'activate',None)
+        self.assertEquals(proc1.inbox_count, 0)
+        yield pu.asleep(1)
+        self.assertEquals(proc1.inbox_count, 0)
+
+        yield child2.activate()
+        yield pu.asleep(1)
+        self.assertEquals(child2._get_state(), 'ACTIVE')
+        self.assertEquals(proc1.inbox_count, 1)
+
+        (cont,hdrs,msg) = yield self.test_sup.rpc_send(pid2,'echo','content123')
+        #self.assertEquals(cont['value'], 'content123')
+        self.assertEquals(cont, 'content123')
+        log.info('Process 1 responsive correctly after init')
+
+
     @defer.inlineCallbacks
     def test_error_in_op(self):
         child1 = ProcessDesc(name='echo', module='ion.core.process.test.test_process')

@@ -246,12 +246,13 @@ class Process(BasicLifecycleObject,ResponseCodes):
 
         # Callback to subclasses
         try:
-            yield defer.maybeDeferred(self.plc_activate)
+            # Changed to allow passing arguments to plc_activate
+            yield defer.maybeDeferred(self.plc_activate, *args, **kwargs)
         except Exception, ex:
             log.exception('----- Process %s ACTIVATE ERROR -----' % (self.id))
             raise ex
 
-    def plc_activate(self):
+    def plc_activate(self, *args, **kwargs):
         """
         Process life cycle event: on activate of process
         """
@@ -825,6 +826,7 @@ class ProcessDesc(BasicLifecycleObject):
         self.proc_module = kwargs.get('module', None)
         self.proc_class = kwargs.get('class', kwargs.get('procclass', None))
         self.proc_node = kwargs.get('node', None)
+        self.proc_activate = kwargs.get('activate',None)
         self.spawn_args = kwargs.get('spawnargs', None)
         self.proc_id = None
         self.no_activate = False
@@ -832,7 +834,7 @@ class ProcessDesc(BasicLifecycleObject):
     # Life cycle
 
     @defer.inlineCallbacks
-    def spawn(self, parent=None, container=None, activate=True):
+    def spawn(self, parent=None, container=None, activate=None):
         """
         Boilerplate for initialize()
         @param parent the process instance that should be set as supervisor
@@ -841,7 +843,20 @@ class ProcessDesc(BasicLifecycleObject):
         #             (self.proc_name, self.proc_node))
         self.sup_process = parent
         self.container = container or ioninit.container_instance
-        pid = yield self.initialize(activate)
+        
+        #######
+        ## Add new mechanism to handle activate switch in service descriptions
+        do_activate = self.proc_activate
+        if activate != None:
+            do_activate=activate
+        
+        if do_activate is None:
+            # Still default to True
+            do_activate = True
+        
+        ###
+        
+        pid = yield self.initialize(do_activate)
         if activate:
             self.no_activate = activate
             yield self.activate()
