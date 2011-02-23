@@ -8,6 +8,8 @@
 
 from twisted.internet import defer
 
+import txamqp
+
 from carrot import connection
 from carrot import messaging
 
@@ -194,11 +196,22 @@ class Consumer(messaging.Consumer):
             # remember the queue name the broker made for us
             self.queue = reply.queue
 
+        bound = False
+        for i in range(3):
+            try:
+                yield self.backend.queue_bind(queue=self.queue,
+                                        exchange=self.exchange,
+                                        routing_key=routing_key,
+                                        arguments=arguments)
+                bound = True
+            except txamqp.client.Closed, closed:
+                log.warn(closed)
+            
+            if bound:
+                break
+            
+        
 
-        yield self.backend.queue_bind(queue=self.queue,
-                                    exchange=self.exchange,
-                                    routing_key=routing_key,
-                                    arguments=arguments)
 
         yield self.qos(prefetch_count=1)
 
