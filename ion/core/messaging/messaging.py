@@ -9,6 +9,8 @@
 from twisted.internet import defer
 
 import txamqp
+import ion.util.ionlog
+log = ion.util.ionlog.getLogger(__name__)
 
 from carrot import connection
 from carrot import messaging
