@@ -684,16 +684,139 @@ class IngestionService(ServiceProcess):
     def _merge_overwrite_supplement(self):
 
 
-        log.debug('_merge_overlapping_supplement - Start')
+        log.debug('_merge_overwrite_supplement - Start')
 
-        raise NotImplementedError('OVERWRITE Supplement updates are not yet supported')
+        # A little sanity check on entering recv_done...
+        if len(self.dataset.Repository.branches) != 2:
+            raise IngestionError('The dataset is in a bad state - there should be two branches in the repository state on entering recv_done.', 500)
+
+
+        # Commit the current state of the supplement - ingest of new content is complete
+        self.dataset.Repository.commit('Ingest received complete notification.')
+
+        # The current branch on entering recv done is the supplement branch
+        merge_branch = self.dataset.Repository.current_branch_key()
+
+        # Merge it with the current state of the dataset in the datastore
+        yield self.dataset.MergeWith(branchname=merge_branch, parent_branch='master')
+
+        #Remove the head for the supplement - there is only one current state once the merge is complete!
+        self.dataset.Repository.remove_branch(merge_branch)
+
+
+        # Get the root group of the current state of the dataset
+        root = self.dataset.root_group
+
+        # Get the root group of the supplement we are merging
+        merge_root = self.dataset.Merge[0].root_group
+
+        log.info('Starting Find Dimension LooP')
+
+        # Determine the inner most dimension on which we are aggregating
+        dimension_order = []
+        for merge_var in merge_root.variables:
+
+            # Add each dimension in reverse order so that the inside dimension is always in front... to determine the time aggregation dimension
+            for merge_dim in reversed(merge_var.shape):
+
+                if merge_dim not in dimension_order:
+                    dimension_order.insert(0, merge_dim)
+
+        #print 'FINAL DIMENSION ORDER:'
+        #print [ dim.name for dim in dimension_order]
+
+        # This is the inner most!
+        merge_agg_dim = dimension_order[0]
+
+        log.info('Merge aggregation dimension name is: %s' % merge_agg_dim.name)
+
+
+        supplement_length = merge_agg_dim.length
+
+        result = {EM_TIMESTEPS:supplement_length}
+
+        agg_offset = 0
+        try:
+            agg_dim = root.FindDimensionByName(merge_agg_dim.name)
+            agg_offset = agg_dim.length
+            log.info('Aggregation offset from current dataset: %d' % agg_offset)
+
+        except OOIObjectError, oe:
+            log.debug('No Dimension found in current dataset:' + str(oe))
+
+        # Get the start time of the supplement
+        try:
+            string_time = merge_root.FindAttributeByName('ion_time_coverage_start')
+            supplement_stime = calendar.timegm(time.strptime(string_time.GetValue(), '%Y-%m-%dT%H:%M:%SZ'))
+
+            string_time = merge_root.FindAttributeByName('ion_time_coverage_end')
+            supplement_etime = calendar.timegm(time.strptime(string_time.GetValue(), '%Y-%m-%dT%H:%M:%SZ'))
+
+            result.update({EM_START_DATE:supplement_stime*1000,
+                           EM_END_DATE:supplement_etime*1000})
+
+        except OOIObjectError, oe:
+            log.debug('No start time attribute found in dataset supplement!' + str(oe))
+            raise IngestionError('No start time attribute found in dataset supplement!')
+            # this is an error - the attribute must be present to determine how to append the data supplement time coordinate!
+
+
+        # Get the end time of the current dataset
+        try:
+            string_time = root.FindAttributeByName('ion_time_coverage_end')
+            current_etime = calendar.timegm(time.strptime(string_time.GetValue(), '%Y-%m-%dT%H:%M:%SZ'))
+
+            if current_etime == supplement_stime:
+                agg_offset -= 1
+                log.info('Aggregation offset decremented by one - supplement overlaps: %d' % agg_offset)
+
+            elif current_etime > supplement_stime:
+
+                string_time_ds_end = string_time.GetValue()
+                string_time_sup_start = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(supplement_stime))
+                raise IngestionError('Can not aggregate dataset supplements which overlap by more than one timestep.  Dataset end time: "%s"  Supplement start time: "%s"' % (string_time_ds_end, string_time_sup_start))
+
+            else:
+                log.info('Aggregation offset unchanged - supplement does not overlap.')
+
+        except OOIObjectError, oe:
+            log.debug(oe)
+            log.info('Aggregation offset unchanged - dataset has no ion_time_coverage_end.')
+            # This is not an error - it is a new dataset.
+
+        ###
+        ### Add the dimensions from the supplement to the current state if they are not already there
+        ###
+        merge_dims = {}
+        for merge_dim in merge_root.dimensions:
+            merge_dims[merge_dim.name] = merge_dim
+
+        dims = {}
+        for dim in root.dimensions:
+            dims[dim.name] = dim
+
+        if merge_dims.keys() != dims.keys():
+            if len(dims) != 0:
+                raise IngestionError('Can not ingest supplement with different dimensions than the dataset')
+            else:
+                for merge_dim in merge_root.dimensions:
+                    dim_link = root.dimensions.add()
+                    dim_link.SetLink(merge_dim)
+
+        else:
+            # We are appending an existing dataset - adjust the length of the aggregation dimension
+            agg_dim = dims[merge_agg_dim.name]
+            agg_dim.length = agg_offset + supplement_length
+            log.info('Setting the aggregation dimension %s to %d' % (agg_dim.name, agg_dim.length))
+
+
 
 
     @defer.inlineCallbacks
     def _merge_fmrc_supplement(self):
 
 
-        log.debug('_merge_overlapping_supplement - Start')
+        log.debug('_merge_fmrc_supplement - Start')
 
         raise NotImplementedError('FMRC Supplement updates are not yet supported')
 
