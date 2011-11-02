@@ -1120,7 +1120,13 @@ class IngestionService(ServiceProcess):
                     log.info('ret_vars[1] = %s' % ret_vars[1])
                     cur_agg_var = ret_vars[1]
                 else:
-                    log.warn('More than 1 \'time\' variable returned: count == %s' % len(ret_vars))
+                    log.warn('More than 1 \'time\' variable returned (count == %s): determining if one is suitable' % len(ret_vars))
+                    for var in ret_vars:
+                        dims = var.dimensions
+                        if len(dims) == 1 and dim[1].name == sup_agg_dim_name:
+                            cur_agg_var = var
+                            break
+
             finally:
                 if cur_agg_var is None:
                     log.exception('Time Variable name does not match its dimension name')
