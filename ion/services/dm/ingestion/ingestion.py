@@ -1117,7 +1117,10 @@ class IngestionService(ServiceProcess):
             except OOIObjectError, oe:
                 ret_vars = self._find_time_var(cur_root)
                 if len(ret_vars) == 1:
+                    log.info('ret_vars[1] = %s' % ret_vars[1])
                     cur_agg_var = ret_vars[1]
+                else:
+                    log.warn('More than 1 \'time\' variable returned: count == %s' % len(ret_vars))
             finally:
                 if cur_agg_var is None:
                     log.exception('Time Variable name does not match its dimension name')
