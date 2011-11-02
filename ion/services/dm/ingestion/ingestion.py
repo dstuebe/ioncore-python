@@ -1122,10 +1122,14 @@ class IngestionService(ServiceProcess):
                 else:
                     log.warn('More than 1 \'time\' variable returned (count == %s): determining if one is suitable' % len(ret_vars))
                     for var in ret_vars:
-                        dims = var.dimensions
-                        if len(dims) == 1 and dim[1].name == sup_agg_dim_name:
-                            cur_agg_var = var
-                            break
+                        log.info('var.name = %s' % var.name)
+                        log.info('var = %s' % var)
+                        for i in range(len(var.shape)):
+                            dim = var.shape[i]
+                            log.info('dim = %s' % dim.name)                        
+                            if dim.name == sup_agg_dim_name:
+                                cur_agg_var = var
+                                break
 
             finally:
                 if cur_agg_var is None:
