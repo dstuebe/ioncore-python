@@ -1123,7 +1123,6 @@ class IngestionService(ServiceProcess):
                     log.warn('More than 1 \'time\' variable returned (count == %s): determining if one is suitable' % len(ret_vars))
                     for var in ret_vars:
                         log.info('var.name = %s' % var.name)
-                        log.info('var = %s' % var)
                         for i in range(len(var.shape)):
                             dim = var.shape[i]
                             log.info('dim = %s' % dim.name)                        
